@@ -1,0 +1,21 @@
+# Data Manipulation & Math
+pandas
+numpy
+scipy
+
+# Machine Learning & Time Series (The "Science" part)
+scikit-learn
+statsmodels
+darts             # Advanced time-series forecasting for energy prices
+pmdarima          # Auto-ARIMA for price prediction logic
+
+# Agent-Based Modeling (The "Gaia Mind" part)
+mesa              # Essential for simulating decentralized autonomous agents
+
+# Visualization (For your paper's graphs)
+matplotlib
+seaborn
+plotly            # Great for interactive Smart City dashboards
+
+# System Monitoring (For the "Edge AI" novelty)
+psutil            # To measure the AI's actual CPU/RAM usage during execution
