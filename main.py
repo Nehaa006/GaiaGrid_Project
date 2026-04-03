@@ -1,73 +1,107 @@
 import pandas as pd
+import numpy as np
+import warnings
+import os
+from dotenv import load_dotenv
+
+# Internal Imports
 from src.data_loader import load_gaia_data
 from src.agent import GaiaGridAgent
-import numpy as np
-from sklearn.metrics import accuracy_score, f1_score, roc_curve, auc, confusion_matrix
-import warnings
+from src.rag_agent import GaiaConsultant
+from src.vector_store import build_knowledge_base
+
+# Setup
 warnings.filterwarnings("ignore", category=UserWarning)
+load_dotenv()
 
 def run_gaia_simulation():
-    # 1. Initialize
+    """Runs the battery simulation based on CSV data"""
     data = load_gaia_data()
     agent = GaiaGridAgent()
     log = []
 
     print("🚀 Running Agentic Edge AI Simulation...")
     
-    # 2. Process hourly steps
     for ts, row in data.iterrows():
-        # Input features
         cons = row['Global_active_power']
         prc = row['price actual']
         tmp = row['temp']
         cld = row['clouds_all']
         
-        # Get Agent decision
         act = agent.compute_action(cons, prc, tmp, cld)
         
         log.append({
-            'timestamp': ts,
-            'price': prc,
-            'action': act,
-            'battery_soc': agent.battery_level,
+            'timestamp': ts, 
+            'price': prc, 
+            'action': act, 
+            'battery_soc': agent.battery_level, 
             'cumulative_savings': agent.total_savings
         })
 
-    # 3. Export Results
     results_df = pd.DataFrame(log)
     results_df.to_csv('gaia_simulation_results.csv', index=False)
-    print(f"🏁 Simulation Complete! Total Savings: ${agent.total_savings:.2f}")
-    print("📊 Results saved to 'gaia_simulation_results.csv'")
+    
+    print(f"🏁 Simulation Complete! Total Savings: €{agent.total_savings:.2f}")
+    return results_df, agent
+
+def start_chatbot(results, battery_agent, consultant):
+    """The interactive loop for talking to Gaia and controlling the battery"""
+    print("\n" + "="*50)
+    print("💬 GAIA INTERACTIVE CONTROL CENTER")
+    print("Commands: 'Charge', 'Discharge', 'Status', or any question.")
+    print("Type 'Exit' to stop.")
+    print("="*50)
+
+    while True:
+        user_query = input("\n👤 YOU: ").strip().lower()
+        
+        if user_query in ['exit', 'quit', 'bye']:
+            print("👋 Gaia signing off. Stay optimized!")
+            break
+            
+        if user_query == 'status':
+            print(f"🔋 Current Battery: {battery_agent.battery_level:.1f}%")
+            print(f"💰 Total Savings: €{battery_agent.total_savings:.2f}")
+            continue
+
+        # --- AGENTIC ACTION LOGIC ---
+        # We manually trigger the battery state and change the context for the AI
+        current_action = results.iloc[-1]['action'] # Default to last simulated action
+        
+        if "charge" in user_query:
+            battery_agent.battery_level = min(100.0, battery_agent.battery_level + 10.0)
+            current_action = "MANUAL_CHARGE"
+            print(f"⚡ [ACTION]: Increasing battery SOC...")
+            
+        elif "discharge" in user_query:
+            battery_agent.battery_level = max(0.0, battery_agent.battery_level - 10.0)
+            current_action = "MANUAL_DISCHARGE"
+            print(f"📉 [ACTION]: Decreasing battery SOC...")
+
+        # Get the latest price context
+        last_price = results.iloc[-1]['price']
+        
+        print("🤔 Gaia is thinking...")
+        
+        # Call the RAG Agent (Groq + Vector Store)
+        response = consultant.explain_action(
+            price=last_price,
+            action=current_action,
+            context_query=user_query
+        )
+        
+        print(f"\n🤖 GAIA: {response}")
+        print(f"🔋 [SYSTEM UPDATE]: Battery SOC is now {battery_agent.battery_level:.1f}%")
 
 if __name__ == "__main__":
-    run_gaia_simulation()
+    # 1. Run the simulation
+    results, battery_agent = run_gaia_simulation()
 
+    # 2. Initialize RAG Agent (Memory + Voice)
+    print("\n--- INITIALIZING GAIA VOICE SYSTEM ---")
+    # This will load the existing './gaia_memory' folder automatically
+    vector_db = build_knowledge_base("./knowledge")
+    consultant = GaiaConsultant(vector_db)
 
-def run_simulation_with_metrics(df, agent):
-    y_true = []
-    y_pred = []
-    y_scores = [] # For ROC Curve (the 'confidence' or price delta)
-
-    for i in range(len(df)-1):
-        row = df.iloc[i]
-        next_row = df.iloc[i+1]
-        
-        # 1. THE GROUND TRUTH (The "Oracle")
-        # If price goes up significantly in the next hour, the CORRECT action was 'CHARGE' now.
-        if next_row['price actual'] > row['price actual'] * 1.1:
-            true_action = 1 # Charge
-        elif next_row['price actual'] < row['price actual'] * 0.9:
-            true_action = 0 # Discharge/Hold
-        else:
-            true_action = 0 # Hold
-            
-        # 2. THE AGENT'S PREDICTION
-        agent_action_str = agent.compute_action(row['Global_active_power'], row['price actual'], row['temp'], row['clouds_all'])
-        agent_action = 1 if "CHARGE" in agent_action_str else 0
-        
-        y_true.append(true_action)
-        y_pred.append(agent_action)
-        # Use price difference as a proxy for 'probability score' for ROC
-        y_scores.append(next_row['price actual'] - row['price actual'])
-
-    return y_true, y_pred, y_scores
+    # 3. Enter Chat Mode
+    start_chatbot(results, battery_agent, consultant)
