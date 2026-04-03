@@ -1,0 +1,5 @@
+The Spanish electricity market clearing price is highly volatile and affected by weather conditions. 
+High temperatures above 30 degrees Celsius increase demand due to air conditioning. 
+Solar energy production peaks at midday, often lowering prices. 
+Charging the battery is most cost-effective during off-peak hours (typically 2 AM to 6 AM). 
+Discharging should occur during evening peak hours (7 PM to 10 PM) for maximum ROI.
